@@ -50,11 +50,7 @@ from sklearn.preprocessing import StandardScaler
 #For clustering
 from sklearn.cluster import KMeans
 
-#To hide warnings
-import sys
-if not sys.warnoptions:
-    import warnings
-    warnings.simplefilter("ignore")
+from os import path, makedirs
 
 #FUNCTIONS to use in the analysis
 def show_image(image, cmap_type='gray'):
@@ -62,21 +58,22 @@ def show_image(image, cmap_type='gray'):
     plt.axis('off')
     plt.show()
 
-
-# Take valid inputs for BioLib using argparse
 import argparse
 
 # Load input data
 parser = argparse.ArgumentParser()
-parser.add_argument('--file', help = '') # can be a path or a str or a number
-parser.add_argument('--background', help = "")
-parser.add_argument('--cluster', help="Integer value to be use to cluster the data")
+parser.add_argument('--file', help = "filename of image")
+parser.add_argument('--background', metavar='FILE', help = "filename of background image for subtraction")
+parser.add_argument('--outdir', default=False, help = "directory for output files, or else saved to current dir")
+parser.add_argument('--outbasename', default=False, help = "base name for output files, otherwise the input basename")
+parser.add_argument('--cluster', help="integer value of clusters to be use with Kmeans to cluster the data")
+parser.add_argument('--color', action='store_true', help="only use color channels in clustering")
 args = parser.parse_args()
 
 #READ PICTURES
 file = args.file
 
-if args.background != "None":
+if args.background != None:
     background = args.background
 else:
     background = 0
@@ -85,12 +82,20 @@ img = cv2.imread(file, 1)
 
 #Create file name for output
 # Proposal to get file name
-import ntpath
-name = ntpath.basename(file).split('.')[0]
 
+if args.outbasename == 'None':
+    name = ''
+elif args.outbasename:
+    name = args.outbasename + "_"
+else:
+    name = path.basename(file).split('.')[0] + "_" 
+
+#make outdir
+if args.outdir: makedirs(args.outdir, exist_ok=True)
 
 #convert BGR to RGB
-image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) #cv2 opens as BGR, need RGB
+
 #show_image(image)
 if background == 1:
     #read background
@@ -105,7 +110,7 @@ if background == 1:
     #p1, p99 = np.percentile(rgb_lessbackgroud, (1,99))
     #rgbIR = rescale_intensity(rgb_lessbackgroud, in_range=(p1, p99))
 else:
-    rgbIR = rgb2gray(image[:,:,0])
+    rgbIR = image[:,:,0]
     #rgbiR = rgb2gray(image[:,:,0])
     #p1, p99 = np.percentile(rgbiR, (1,99))
     #rgbIR = rescale_intensity(rgbiR, in_range=(p1, p99))
@@ -139,7 +144,7 @@ rgbI_mask=mask*rgb_constrast
 #image_threshold_bright = rgbI_mask >= rgbI_otsu_thr
 image_threshold_bright = rgbI_mask >= 200
 #show_image(image_threshold_bright)
-image_local_open = skimage.morphology.binary_opening(image_threshold_bright, selem=skimage.morphology.disk(5))
+image_local_open = skimage.morphology.binary_opening(image_threshold_bright, footprint=skimage.morphology.disk(5))
 image_area_closing = skimage.morphology.area_closing(image_local_open)
 binary_image_bright = image_area_closing
 #show_image(binary_image_bright)
@@ -149,7 +154,7 @@ binary_image_bright = image_area_closing
 #image_threshold_dark = (rgbI_mask < rgbI_otsu_thr)*mask
 image_threshold_dark = rgbI_mask < 40
 #show_image(image_threshold_dark)
-image_local_open = skimage.morphology.binary_opening(image_threshold_dark, selem=skimage.morphology.disk(5))
+image_local_open = skimage.morphology.binary_opening(image_threshold_dark, footprint=skimage.morphology.disk(5))
 image_area_closing = skimage.morphology.area_closing(image_local_open)
 binary_image_dark = image_area_closing
 #show_image(binary_image_dark)
@@ -190,7 +195,7 @@ data_R = df.rename(columns={'mean_intensity':'mean_intensity-R'})
 
 #DATA FILTERING
 
-#Filter first by size and sape
+#Filter first by size and shape
 data_region = data_R.loc[(data_R['area']>60) & (data_R['area']<500000) & (data_R['eccentricity'] < 0.8)]
 
 #Filter second by position on the plate
@@ -201,8 +206,8 @@ j = 1
 th = np.arange(0,2*np.pi,np.pi/5)
 for i in range(data_region.shape[0]):
     #Fit a circle
-    xunit = data_region.iloc[i][5]/2 * np.cos(th) + data_region.iloc[i][1]
-    yunit = data_region.iloc[i][5]/2 * np.sin(th) + data_region.iloc[i][2]
+    xunit = data_region.iloc[i].iloc[5]/2 * np.cos(th) + data_region.iloc[i].iloc[1]
+    yunit = data_region.iloc[i].iloc[5]/2 * np.sin(th) + data_region.iloc[i].iloc[2]
     #Find within the boundaries. Check ci variable
     y1 = np.array(yunit>200)
     y2 = np.array(yunit<1875)
@@ -222,7 +227,7 @@ data_R = data_regions_R[data_regions_R.columns[1:]]
 
 
 #GREEN CHANNEL
-rgbIG = rgb2gray(image[:,:,1])
+rgbIG = image[:,:,1]
 #show_image(rgbIG)
 #analyze regions
 regions = regionprops_table(image_labeled, intensity_image=rgbIG, properties = ('label', 'mean_intensity'))
@@ -233,7 +238,7 @@ data_G = data.iloc[idx]
 data_G.reset_index(drop=True, inplace=True)
 
 #BLUE CHANNEL
-rgbIB = rgb2gray(image[:,:,2])
+rgbIB = image[:,:,2]
 #show_image(rgbIG)
 # analyze regions
 regions = regionprops_table(image_labeled, intensity_image=rgbIB, properties = ('label', 'mean_intensity'))
@@ -257,7 +262,7 @@ name_df = pd.DataFrame(data=temp_df)
 df_R = name_df.join(data_R)
 df_RG = df_R.join(data_G['mean_intensity-G'])
 df_RGB = df_RG.join(data_B['mean_intensity-B'])
-name_df_output = (name+'_outputDF.csv')
+name_df_output = path.join(args.outdir, name+'outputDF.csv')
 df_RGB.to_csv(name_df_output)
 
 #MAP COLONIES IN PLATE
@@ -276,16 +281,19 @@ for i in range(df_RGB.shape[0]) :
 #cv2.destroyAllWindows()
 
 #save image
-name_image_output_ID = (name+'_outputID.png')
+name_image_output_ID = path.join(args.outdir, name+'outputID.png')
 cv2.imwrite(name_image_output_ID, img)
 
 #print("END")
-print("![results](%s)" %name_image_output_ID)
+print("result colonies: %s and .csv" %name_image_output_ID)
 
 #DO CLUSTERING
 #Do clustering based on data
-features = ['equivalent_diameter', 'eccentricity', 'convex_area', 
-'mean_intensity-R', 'mean_intensity-G', 'mean_intensity-B']
+if args.color: 
+    features = ['mean_intensity-R', 'mean_intensity-G', 'mean_intensity-B']
+else:
+    features = ['equivalent_diameter', 'eccentricity', 'convex_area', 'mean_intensity-R', 'mean_intensity-G', 'mean_intensity-B']
+
 #features
 
 data = df_RGB.loc[:,features]
@@ -302,7 +310,7 @@ clusters_n = pd.DataFrame(data=d)
 
 #Add cluster labels
 df_RGB_cluster = df_RGB.join(clusters_n)
-name_df_output = (name+'_output_clusterDF.csv')
+name_df_output = path.join(args.outdir, name+'output_clusterDF.csv')
 df_RGB_cluster.to_csv(name_df_output)
 
 #Read image again using cv2 
@@ -314,8 +322,8 @@ for i in range(df_RGB.shape[0]):
     cv2.putText(img, str(df_RGB_cluster['cluster_n'][i]), (round(df_RGB_cluster['centroid-1'][i])+30, round(df_RGB_cluster['centroid-0'][i])+10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (1, 1, 1), 4)
 
 #save image
-name_image_output_cluster = (name+'_output_clusterID.png')
+name_image_output_cluster = path.join(args.outdir, name+'output_clusterID.png')
 cv2.imwrite(name_image_output_cluster, img)
 
 #print("END")
-print("![results](%s)" %name_image_output_cluster)
+print("result clusters: %s and .csv" %name_image_output_cluster)

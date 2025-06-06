@@ -1,0 +1,14 @@
+name: ColFeatures
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - numpy
+  - pandas
+  - matplotlib
+  - scikit-image
+  - scipy
+  - scikit-learn
+  - opencv
+prefix: /home/jamesrh/miniforge3/envs/ColFeatures
