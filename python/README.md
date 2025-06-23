@@ -20,19 +20,19 @@ The .csv file(s) created contains the following information: unique_label,label,
 
 ## commandline options
 
-'''
-usage: ID_colonies.py [-h] [--file FILE] [--background FILE] [--outdir OUTDIR]
-                      [--outbasename NAME] [--cluster CLUSTER] [--color]
 
-options:
-  -h, --help          show this help message and exit
-  --file FILE         filename of image
-  --background FILE   filename of background image for subtraction
-  --outdir OUTDIR     directory for output files, or else saved to current dir
-  --outbasename NAME  base name for output files, otherwise the input basename
-  --cluster CLUSTER   integer value of clusters to be use with Kmeans to cluster the data
-  --color             only use color channels in clustering
-'''
+        usage: ID_colonies.py [-h] [--file FILE] [--background FILE] [--outdir OUTDIR]
+                              [--outbasename NAME] [--cluster CLUSTER] [--color]
+
+        options:
+          -h, --help          show this help message and exit
+          --file FILE         filename of image
+          --background FILE   filename of background image for subtraction
+          --outdir OUTDIR     directory for output files, or else saved to current dir
+          --outbasename NAME  base name for output files, otherwise the input basename
+          --cluster CLUSTER   integer value of clusters to be use with Kmeans to cluster the data
+          --color             only use color channels in clustering
+
 
 ## Instalation and dependences using Conda
 

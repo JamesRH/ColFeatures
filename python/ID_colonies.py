@@ -96,21 +96,24 @@ if args.outdir: makedirs(args.outdir, exist_ok=True)
 #convert BGR to RGB
 image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) #cv2 opens as BGR, need RGB
 
+def mergeRGB(image):
+    return image[:,:,0]/3 + image[:,:,1]/3 + image[:,:,2]/3
+    
 #show_image(image)
 if background == 1:
     #read background
-    back = cv2.imread(background[:,:,0]) # TODO change this path because it will not work for everyone
+    back = cv2.imread(background) 
     #convert BGR to RGB
     back = cv2.cvtColor(back, cv2.COLOR_BGR2RGB)
     #substract background
-    rgbiR = rgb2gray(image[:,:,0])
-    rgbbR = rgb2gray(back[:,:,0])
-    rgbIR = (rgbiR - rgbbR)
+    rgbiAll = mergeRGB(image)
+    rgbbAll = mergeRGB(back)
+    rgbIAll = (rgbiAll - rgbbAll)
     #rgb_lessbackgroud = (rgbiR - rgbbR)
     #p1, p99 = np.percentile(rgb_lessbackgroud, (1,99))
     #rgbIR = rescale_intensity(rgb_lessbackgroud, in_range=(p1, p99))
 else:
-    rgbIR = image[:,:,0]
+    rgbIAll = mergeRGB(image)
     #rgbiR = rgb2gray(image[:,:,0])
     #p1, p99 = np.percentile(rgbiR, (1,99))
     #rgbIR = rescale_intensity(rgbiR, in_range=(p1, p99))
@@ -119,12 +122,12 @@ else:
 #show_image(rgbIR)
 
 #CONTRAST
-p10, p90 = np.percentile(rgbIR, (10,90))
-rgb_constrast = rescale_intensity(rgbIR, in_range=(p10, p90))
+p10, p90 = np.percentile(rgbIAll, (10,90))
+rgb_constrast = rescale_intensity(rgbIAll, in_range=(p10, p90))
 
 #MASK AND SEGMENTATION
 #Get image size
-imageSize = rgbIR.shape
+imageSize = rgbIAll.shape
 ci = [1030, 1050, 820]
 #Generate grid same size as the original image
 x = np.arange(0,imageSize[0])-ci[0]
@@ -142,7 +145,7 @@ rgbI_mask=mask*rgb_constrast
 #rgbI_otsu_thr = skimage.filters.threshold_otsu(rgbIR, nbins=256)
 #rgbI_otsu_thr
 #image_threshold_bright = rgbI_mask >= rgbI_otsu_thr
-image_threshold_bright = rgbI_mask >= 200
+image_threshold_bright = rgbI_mask >= 200/256
 #show_image(image_threshold_bright)
 image_local_open = skimage.morphology.binary_opening(image_threshold_bright, footprint=skimage.morphology.disk(5))
 image_area_closing = skimage.morphology.area_closing(image_local_open)
@@ -152,7 +155,7 @@ binary_image_bright = image_area_closing
 #FOR DARK COLONIES
 #rgbI_otsu_thr = skimage.filters.threshold_otsu(rgbI_mask)
 #image_threshold_dark = (rgbI_mask < rgbI_otsu_thr)*mask
-image_threshold_dark = rgbI_mask < 40
+image_threshold_dark = rgbI_mask < 70/256
 #show_image(image_threshold_dark)
 image_local_open = skimage.morphology.binary_opening(image_threshold_dark, footprint=skimage.morphology.disk(5))
 image_area_closing = skimage.morphology.area_closing(image_local_open)
@@ -183,20 +186,20 @@ segmented_bact_BW = np.array((segmented_bact > 1)*1)
 
 #EXTRACT INFORMATION FROM REGIONS
 
-#RED CHANNEL
+#Merged CHANNEL
 #label image for mapping
 image_labeled = label(segmented_bact)
 # analyze regions
-regions = regionprops_table(image_labeled, intensity_image=rgbIR, properties = ('label','centroid', 'area', 'perimeter',
+regions = regionprops_table(image_labeled, intensity_image=rgbIAll, properties = ('label','centroid', 'area', 'perimeter',
 'equivalent_diameter', 'eccentricity', 'convex_area', 'mean_intensity'))
 #turn into data frame for easy access
 df = pd.DataFrame(regions)
-data_R = df.rename(columns={'mean_intensity':'mean_intensity-R'})
+data_All = df.rename(columns={'mean_intensity':'mean_intensity-All'})
 
 #DATA FILTERING
 
 #Filter first by size and shape
-data_region = data_R.loc[(data_R['area']>60) & (data_R['area']<500000) & (data_R['eccentricity'] < 0.8)]
+data_region = data_All.loc[(data_All['area']>60) & (data_All['area']<500000) & (data_All['eccentricity'] < 0.5)]
 
 #Filter second by position on the plate
 # Calculate indexes to plot a circle and compare with the indexes in mask to remove colonies near or outside the border.
@@ -220,11 +223,21 @@ for i in range(data_region.shape[0]):
         label_ID.append(j)
         j = j + 1
 #Filtered data frame
-data_regions_R = data_region.iloc[idx]
-data_regions_R.reset_index(drop=True, inplace=True)
-data_R = data_regions_R[data_regions_R.columns[1:]]
+data_regions_All = data_region.iloc[idx]
+data_regions_All.reset_index(drop=True, inplace=True)
+data_All = data_regions_All[data_regions_All.columns[1:]]
 
 
+#RED CHANNEL
+rgbIR = image[:,:,0]
+#show_image(rgbIG)
+#analyze regions
+regions = regionprops_table(image_labeled, intensity_image=rgbIR, properties = ('label', 'mean_intensity'))
+#turn into data frame for easy access
+data = pd.DataFrame(regions)
+data = data.rename(columns={'mean_intensity':'mean_intensity-R'})
+data_R = data.iloc[idx]
+data_R.reset_index(drop=True, inplace=True)
 
 #GREEN CHANNEL
 rgbIG = image[:,:,1]
@@ -251,7 +264,7 @@ data_B.reset_index(drop=True, inplace=True)
 
 #GENERATE UNIQUE LABELS
 name_label = []
-for i in range(data_regions_R.shape[0]):
+for i in range(data_regions_All.shape[0]):
     label_str = str(label_ID[i])
     name_label.append(name+'_'+label_str)
 
@@ -259,7 +272,8 @@ temp_df = {'unique_label':name_label, 'label':label_ID}
 name_df = pd.DataFrame(data=temp_df)
 
 #JOIN DATA FRAMES
-df_R = name_df.join(data_R)
+df_All = name_df.join(data_All, how='outer')
+df_R = df_All.join(data_R['mean_intensity-R'])
 df_RG = df_R.join(data_G['mean_intensity-G'])
 df_RGB = df_RG.join(data_B['mean_intensity-B'])
 name_df_output = path.join(args.outdir, name+'outputDF.csv')
